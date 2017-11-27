@@ -388,8 +388,6 @@ void got_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *pa
 			printf(" type 0x%x ", ETHERTYPE_ARP);
 			printf(" len %d ", header->len);	
 			printf("  ARP\n");
-	} else {
-		printf("OTHER\n");
 	}
 	}	
 }

@@ -1,0 +1,41 @@
+a) Test environment
+	$ lsb_release -a
+	ajinkuriakose@Inspiron-5559:~/Desktop/ns$  lsb_release -a
+	No LSB modules are available.
+	Distributor ID:	Ubuntu
+	Description:	Ubuntu 16.04.3 LTS
+	Release:	16.04
+	Codename:	xenial
+
+	$ uname -srm
+	Linux 4.10.0-38-generic x86_64
+
+b) Compiler and its version
+   gcc version 5.4.0 20160609 (Ubuntu 5.4.0-6ubuntu1~16.04.5) 
+
+
+c) Command line with the options to run your programs (both server and client)
+	Server : ./pbproxy -l 2222 -k mykey localhost 22
+	Client : ssh -o "Proxycommand ./pbproxy -k mykey localhost 2222" localhost
+
+d) Description about the design of your pbproxy
+	
+The pbproxy program will act as a proxy on the client side and as server-side reverse proxy. It encrypts the trafic between the client and the server using OpenSSL library . I have used an Event-driven programming model where the  server and client keeps on listening for any inputs until they are terminated. 
+getopt method is used to read the parameters passed to the program and then to switch between the client and server mode. The key is parsed and is used both in the server and client.
+
+Client Side : - A socket is created to establish a connection with a server  specifying the type of communication protocol as TCP .Connect() function is then used to establish connection with the server based on the given input destination host/port using the socket created in the previous step. A while(1) loop is used to make the client listen continously on StdIN and on the socket. Client reads the plain text traffic from the STDIN, encrypts and writes it to the socket. Any traffic reaches on the socket is read, decrypted and written onto the StdOut. Both the Stdin and socket is put in non-blocking mode to avoid blocking. When the client program starts and 8-Bit random IV is generated , padded with another 8-bit(that acts as counter) and then writen to the socket for the server. The further traffic that is encrypted by the client uses this IV and on the server side  the first packet that is received for a client is treated seperately to extract out this IV. Similarly the client receives the IV send by the server for decrypting the traffic from the server.
+
+
+Server Side : The proxy server side uses 2 sockets to communicate to the client side and to the ssh server. The bind() function is used to bind the client side socket to an arbitary IP address choosen by the kernel.Here also the file descripters are put in non-blocking mode to avoid blocking.Then using a while(1) loop the server keeps on listening to new client requests using the accept() method. When a new client is connected , the accept() function returns the socket of the client with which we can communucate to. The program then reads the packets coming on the client socket and writes them to the server socket and vice versa. This is again done in a while(1) loop such that for a client that is already connected the server keeps on responding to requests till the connection is terminated.The connect() function is used to establish the connection to the remote server and bind that to the socket that we created earlier. The encryption and decryption is also done in a similar way as in client. Before the first package is written by the server a new 8-bit random IV vector is generated and appended with a 8-bit counter and the same is written to the client side socket. Further encryption done  by the server uses the same counter variable. Before the server starts reading any packets, it reads the IV send from the client (upon connection establishment) , and uses that to decrypt the packets.So in short there are 2 IVs created - One for client-server communication and one for server-client communication.
+
+The server supports client iteratively, that is it keeps on servicing one client after the other until the server process is killed.I am using usleep() the after writting data over the socket to avoid multiple packets getting combined and then decrpted incorrectly.
+
+e) References 
+http://man7.org/linux/man-pages/man3
+http://www.cs.dartmouth.edu/~campbell/cs50/socketprogramming.html
+http://www.tutorialspoint.com/unix_system_calls/fcntl.htm
+http://www.gurutechnologies.net/blog/aes-ctr-encryption-in-c/
+
+
+
+

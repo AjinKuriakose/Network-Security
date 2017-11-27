@@ -1,0 +1,147 @@
+Report 
+======
+
+"mydump" application uses the libpcap library to print out the package information read from an interface or a (pcap)file.The application is build using the help available  from http://www.tcpdump.org/pcap.html as a referece.
+
+The application supports the following options.
+
+mydump [-i interface] [-r file] [-s string] expression
+As an additional option , the application also supports [-c count] option to capture the 'count' number of packets from the specified interface.
+This option does not work while reading from file.
+
+The user options are taken using the getopt method. The user is allowed to specify only one among the option among -i and -r. If none of the options(interface or file name) is specified, the application will try to lookup for an interface using pcap_lookupdev . The interface obtained from eiether of the above methods is used to open a pcap live session, using the library method pcap_open_live. If the file name is specified then the device will open a pcap session using pcap_open_offline library method. If eiether of the above method fails , then an error is reported to the user.
+
+
+The handle obtained using the pcap_open_live or pcap_open_offline method is used to capture the packets infinetly (or till the count given by '-c' option). This is done using the pcap_loop() library function. The pcap_loop function accepts a function pointer and calls that function each time when pcap sniffs a packet. 
+I have created a callback function : void got_packet(u_char *args, const struct pcap_pkthdr *header,const u_char *packet);The first argument to the function corresponds to the last argument of pcap_loop(). Whatever value is passed as the last argument to pcap_loop() is passed to the first argument of our callback function every time the function is called. The [-s string] argument that is given by the user is passed to the got_packet method using this argument.The second argument is the pcap header, which contains information about when the packet was sniffed, how large it is, etc. The third argument is a pointer to a u_char, and it points to the first byte of a chunk of data containing the entire packet, as sniffed by pcap_loop(). This packet pointer is used to obtain the various information that the packet holds , like the ip header, MAC address etc.
+
+Approach and Sample Output
+==========================
+1. Sniffing packets  from an interface.
+If the no option is specified , and interface is looked up using pcap_lookupdev . If the input interface is not a valid one an error is thrown.
+
+sudo ./mydump -i any | head 
+Interface: any
+
+ 2017:10:13 21:41:37.1507945297 00:0c:29:d2:27:81 -> 00:04:00:01:00:06  type 0x800  len 56 175.130.192.168 -> 121.130.35.167  OTHER 
+00000   00 00 50 04 00 00 17 a8  00 00 09 00 00 20 98 00    ..P.......... ..
+00016   00 00 51 6b e1 59 02 c9  6c 1e 2e 00 00 00 2e 00    ..Qk.Y..l.......
+00032   00 00 81 00 00 20 64 00  64 00 00 00 00 00 00 00    ..... d.d.......
+00048   00 00 00 00 00 00 00 00  00 00 00 00 00 00 11 00    ................
+00064   08 00 02 00 00 00 01 00  00 06 00 50 56 f8 3a 7d    ...........PV.:}
+00080   00 0c 29 d2 27 81 00 00  08 00 45 00 00 28 7a 16    ..).'.....E..(z.
+00096   40 00 40 06 e1 19 c0 a8  79 82 17 c2 8d b3 8f de    @.@.....y.......
+
+2.Sniffing packets from a pcap file
+Example: 
+sudo ./mydump -r hw1.pcap  | head -30
+File: hw1.pcap
+
+2013:01:12 11:37:42.1358008662 c4:3d:c7:17:6f:9b -> ff:ff:ff:ff:ff:ff  type 0x806  len 60   ARP
+
+2013:01:12 11:38:02.1358008682 c4:3d:c7:17:6f:9b -> 01:00:5e:7f:ff:fa  type 0x800  len 342 192.168.0.1.1901 -> 239.255.255.250.1900  UDP 
+00000   4e 4f 54 49 46 59 20 2a  20 48 54 54 50 2f 31 2e    NOTIFY * HTTP/1.
+00016   31 0d 0a 48 4f 53 54 3a  20 32 33 39 2e 32 35 35    1..HOST: 239.255
+00032   2e 32 35 35 2e 32 35 30  3a 31 39 30 30 0d 0a 43    .255.250:1900..C
+00048   61 63 68 65 2d 43 6f 6e  74 72 6f 6c 3a 20 6d 61    ache-Control: ma
+00064   78 2d 61 67 65 3d 33 36  30 30 0d 0a 4c 6f 63 61    x-age=3600..Loca
+00080   74 69 6f 6e 3a 20 68 74  74 70 3a 2f 2f 31 39 32    tion: http://192
+00096   2e 31 36 38 2e 30 2e 31  3a 38 30 2f 52 6f 6f 74    .168.0.1:80/Root
+00112   44 65 76 69 63 65 2e 78  6d 6c 0d 0a 4e 54 3a 20    Device.xml..NT: 
+00128   75 75 69 64 3a 75 70 6e  70 2d 49 6e 74 65 72 6e    uuid:upnp-Intern
+00144   65 74 47 61 74 65 77 61  79 44 65 76 69 63 65 2d    etGatewayDevice-
+00160   31 5f 30 2d 63 34 33 64  63 37 31 37 36 66 39 62    1_0-c43dc7176f9b
+00176   0d 0a 55 53 4e 3a 20 75  75 69 64 3a 75 70 6e 70    ..USN: uuid:upnp
+00192   2d 49 6e 74 65 72 6e 65  74 47 61 74 65 77 61 79    -InternetGateway
+00208   44 65 76 69 63 65 2d 31  5f 30 2d 63 34 33 64 63    Device-1_0-c43dc
+00224   37 31 37 36 66 39 62 0d  0a 4e 54 53 3a 20 73 73    7176f9b..NTS: ss
+00240   64 70 3a 61 6c 69 76 65  0d 0a 53 65 72 76 65 72    dp:alive..Server
+00256   3a 20 55 50 6e 50 2f 31  2e 30 20 55 50 6e 50 2f    : UPnP/1.0 UPnP/
+00272   31 2e 30 20 55 50 6e 50  2d 44 65 76 69 63 65 2d    1.0 UPnP-Device-
+00288   48 6f 73 74 2f 31 2e 30  0d 0a 0d 0a                Host/1.0....
+
+ 2013:01:12 11:38:02.1358008682 c4:3d:c7:17:6f:9b -> 01:00:5e:7f:ff:fa  type 0x800  len 398 192.168.0.1.1901 -> 239.255.255.250.1900  UDP
+
+3. Usage of [-s string] option.
+This check is done in the got_packet() method using a string comparion on the payload. If the string filter is specified, and if the given string is not a substring of the payload, then nothing is printed. 
+
+sudo ./mydump -r hw1.pcap -s Broadcom | head -30
+File: hw1.pcap
+String: Broadcom
+
+ 2013:01:12 11:38:16.1358008696 c4:3d:c7:17:6f:9b -> 01:00:5e:7f:ff:fa  type 0x800  len 405 192.168.0.1.1900 -> 239.255.255.250.1900  UDP 
+00000   4e 4f 54 49 46 59 20 2a  20 48 54 54 50 2f 31 2e    NOTIFY * HTTP/1.
+00016   31 0d 0a 48 6f 73 74 3a  20 32 33 39 2e 32 35 35    1..Host: 239.255
+00032   2e 32 35 35 2e 32 35 30  3a 31 39 30 30 0d 0a 43    .255.250:1900..C
+00048   61 63 68 65 2d 43 6f 6e  74 72 6f 6c 3a 20 6d 61    ache-Control: ma
+00064   78 2d 61 67 65 3d 36 30  0d 0a 4c 6f 63 61 74 69    x-age=60..Locati
+00080   6f 6e 3a 20 68 74 74 70  3a 2f 2f 31 39 32 2e 31    on: http://192.1
+00096   36 38 2e 30 2e 31 3a 31  39 30 30 2f 57 46 41 44    68.0.1:1900/WFAD
+00112   65 76 69 63 65 2e 78 6d  6c 0d 0a 4e 54 53 3a 20    evice.xml..NTS: 
+00128   73 73 64 70 3a 61 6c 69  76 65 0d 0a 53 65 72 76    ssdp:alive..Serv
+00144   65 72 3a 20 50 4f 53 49  58 2c 20 55 50 6e 50 2f    er: POSIX, UPnP/
+00160   31 2e 30 20 42 72 6f 61  64 63 6f 6d 20 55 50 6e    1.0 Broadcom UPn
+00176   50 20 53 74 61 63 6b 2f  65 73 74 69 6d 61 74 69    P Stack/estimati
+00192   6f 6e 20 31 2e 30 30 0d  0a 4e 54 3a 20 75 72 6e    on 1.00..NT: urn
+00208   3a 73 63 68 65 6d 61 73  2d 77 69 66 69 61 6c 6c    :schemas-wifiall
+00224   69 61 6e 63 65 2d 6f 72  67 3a 73 65 72 76 69 63    iance-org:servic
+00240   65 3a 57 46 41 57 4c 41  4e 43 6f 6e 66 69 67 3a    e:WFAWLANConfig:
+00256   31 0d 0a 55 53 4e 3a 20  75 75 69 64 3a 46 35 31    1..USN: uuid:F51
+00272   39 33 39 30 41 2d 34 34  44 44 2d 32 39 35 38 2d    9390A-44DD-2958-
+00288   36 32 33 37 2d 45 41 33  37 42 39 38 37 43 33 46    6237-EA37B987C3F
+00304   44 3a 3a 75 72 6e 3a 73  63 68 65 6d 61 73 2d 77    D::urn:schemas-w
+00320   69 66 69 61 6c 6c 69 61  6e 63 65 2d 6f 72 67 3a    ifialliance-org:
+00336   73 65 72 76 69 63 65 3a  57 46 41 57 4c 41 4e 43    service:WFAWLANC
+00352   6f 6e 66 69 67 3a 31 0d  0a 0d 0a                   onfig:1....
+
+If the string you are searching for contains a space, then the application expects the string to be embedded with ''
+
+4. Usage of expression as argument
+I used a BPF filter to fileter out the packets using the 'expresssion' argument.
+After having called pcap_open_live() and have a working sniffing session, we can apply our filter.The filter expression is compiled first using the function int pcap_compile(pcap_t *p, struct bpf_program *fp, char *str, int optimize, bpf_u_int32 netmask).After applying the filter, then the filter is applied using int pcap_setfilter(pcap_t *p, struct bpf_program *fp) method. Once the filter is applied the pcap handle on which we applied the filter will sniff on packets only that comes under the specified filter.
+
+Example, if I specify the expression as 'icmp', then the filter is applied and the result on the pcap file is shown below:
+
+sudo ./mydump -r hw1.pcap icmp 
+File: hw1.pcap
+Expression is : icmp 
+
+ 2013:01:14 12:42:31.1358185351 c4:3d:c7:17:6f:9b -> 00:0c:29:e9:94:8e  type 0x800  len 90 1.234.31.20 -> 192.168.0.200  ICMP 
+00000   45 00 00 30 00 00 40 00  2e 06 6a 5a c0 a8 00 c8    E..0..@...jZ....
+00016   01 ea 1f 14 00 50 7b 81  bd cd 09 c6 3a 35 22 b0    .....P{.....:5".
+00032   70 12 39 08 11 ab 00 00  02 04 05 b4 01 01 04 02    p.9.............
+
+
+If the expression argument contains a space in between, then the expression needs to be specified within '' .
+Example:
+sudo ./mydump -r hw1.pcap 'port 80' | head -30
+File: hw1.pcap
+Expression is : port 80 
+
+ 2013:01:12 22:30:48.1358047848 c4:3d:c7:17:6f:9b -> 00:0c:29:e9:94:8e  type 0x800  len 74 92.240.68.152.9485 -> 192.168.0.200.80  TCP 
+
+ 2013:01:12 22:30:48.1358047848 00:0c:29:e9:94:8e -> c4:3d:c7:17:6f:9b  type 0x800  len 74 192.168.0.200.80 -> 92.240.68.152.9485  TCP 
+
+ 2013:01:12 22:30:48.1358047848 c4:3d:c7:17:6f:9b -> 00:0c:29:e9:94:8e  type 0x800  len 66 92.240.68.152.9485 -> 192.168.0.200.80  TCP 
+
+ 2013:01:12 22:30:48.1358047848 c4:3d:c7:17:6f:9b -> 00:0c:29:e9:94:8e  type 0x800  len 177 92.240.68.152.9485 -> 192.168.0.200.80  TCP 
+00000   47 45 54 20 68 74 74 70  3a 2f 2f 70 69 63 2e 6c    GET http://pic.l
+00016   65 65 63 68 2e 69 74 2f  69 2f 66 31 36 36 63 2f    eech.it/i/f166c/
+00032   34 37 39 32 34 36 62 30  61 73 74 74 61 73 2e 6a    479246b0asttas.j
+00048   70 67 20 48 54 54 50 2f  31 2e 31 0a 55 73 65 72    pg HTTP/1.1.User
+00064   2d 41 67 65 6e 74 3a 20  77 65 62 63 6f 6c 6c 61    -Agent: webcolla
+00080   67 65 2f 31 2e 31 33 35  61 0a 48 6f 73 74 3a 20    ge/1.135a.Host: 
+00096   70 69 63 2e 6c 65 65 63  68 2e 69 74 0a 0a 00       pic.leech.it...
+
+ 2013:01:12 22:30:48.1358047848 00:0c:29:e9:94:8e -> c4:3d:c7:17:6f:9b  type 0x800  len 66 192.168.0.200.80 -> 92.240.68.152.9485  TCP 
+
+ 2013:01:12 22:30:49.1358047849 00:0c:29:e9:94:8e -> c4:3d:c7:17:6f:9b  type 0x800  len 74 192.168.0.200.40341 -> 87.98.246.8.80  TCP 
+
+ 2013:01:12 22:30:49.1358047849 c4:3d:c7:17:6f:9b -> 00:0c:29:e9:94:8e  type 0x800  len 74 87.98.246.8.80 -> 192.168.0.200.40341  TCP 
+
+ 2013:01:12 22:30:49.1358047849 00:0c:29:e9:94:8e -> c4:3d:c7:17:6f:9b  type 0x800  len 66 192.168.0.200.40341 -> 87.98.246.8.80  TCP 
+
+REFERENCES
+http://www.tcpdump.org/pcap.html
+www.stackoverflow.com
+
