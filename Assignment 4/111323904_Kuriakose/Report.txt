@@ -1,0 +1,228 @@
+I have implemented both the Injection and Detection part in python. 
+The testing was done with victim running on Oracle Virtual box .
+
+Details for both host and Victim 
+OS Version: Ubuntu 16.04.3 LTS
+Language : Python 3.6.3
+scapy , dpkt, argparse, netifaces.
+
+
+Part 1 - DNS Packet Injector
+---------------------------
+The DNS code injection part can be run using command similar to as shown below :
+sudo dnsinject [-i interface] [-h hostnames] expression
+
+eg : sudo python dnsinject.py -i wlp1s0 -h hostnames.txt
+
+Please note that if the expression argument contains space in between, it needs to be sorrounded by ''.
+
+Implementation
+--------------
+I have used python argparse utility to parse the input given by the user. If user has no specified then the default interface is selected. The hostname argument can be used to specify a text file that contains IP- hostname mapping.
+The <hostnames> file should contain one IP and hostname pair per line,
+separated by whitespace, in the following format:
+10.6.6.6 www.facebook.com
+192.168.66.6 www.gmail.com
+192.168.66.6 bbc.com
+
+If the hostname argument is specified , then only the hosts mentioned in the file will be used for hijacking. When the victim tries to get DNS resolution for the hostname , then the IP address specified in the file for that hostname will be send to the victim by doing spoofing.
+If the hostname argument is not specified then all the DNS requests made by the victim will be forged with the IP addess of the attacker. The IP address of the host that is running the DNS inject is obtained using :
+host_ip = ni.ifaddresses(interface)[ni.AF_INET][0]['addr']
+
+Sniffing is done using the sniff function available in the python scapy library . The sniff function allows us to specify an interface and a bpf_expression. By default the bpf_expression is specified as 'udp port 53'. If the user specifies any additional BPF expression as the input argument to dnsinject, then that is appended to the existing BPF expression and is given as input to the sniff method. 
+
+eg : sudo python dnsinject.py -i wlp1s0 -h hostnames.txt 'tcp port 50'
+The above expression is not a valid argument and produces the custom error
+tcpdump: expression rejects all packets
+Filter Parse Error . Please give a valid filter expression
+
+The sniff allows us to specify a callback function . THe packet is formed in the format of a dictionary with many headers.
+
+Eg summary of packets from scapy: 
+0000 Ether / IP / UDP / DNS Qry "www.facebook.com." 
+0001 Ether / IP / UDP / DNS Ans "star-mini.c10r.facebook.com." 
+0002 Ether / IP / UDP / DNS Ans "10.6.6.6"
+
+So when the attacking conditions are satifisfied, a new packet is created using the details of the original target IP . The src and dst IP address of the packet is changed and the DNS record will have the 'rdata' parameter set as the spoofed IP.Scapy libraries are used to create and send the spoofed packet.
+
+Given below is a sample response where my injector has succeeded against 8.8.8.8 . The injection will be successful if the dns response time is greater than 30ms.
+
+; <<>> DiG 9.10.3-P4-Ubuntu dig @8.8.8.8 www.gmail.com
+; (1 server found)
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 65447
+;; flags: qr rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 0
+
+;; QUESTION SECTION:
+;www.gmail.com.			IN	A
+
+;; ANSWER SECTION:
+www.gmail.com.		100	IN	A	192.168.66.6
+
+;; Query time: 48 msec
+;; SERVER: 8.8.8.8#53(8.8.8.8)
+;; WHEN: Sat Dec 09 13:02:08 EST 2017
+;; MSG SIZE  rcvd: 60
+
+Part 2 - DNS Poisoning attack detector
+----------------------------------------
+The DNS poisoning attack detector can be run using command similar to as shown below :
+dnsdetect [-i interface] [-r tracefile] expression
+
+eg : sudo python dnsdetect.py -r hw4.pcap
+or sudo python dnsdetect.py -i wlp1s0 
+
+Please note that if the expression argument contains space in between, it needs to be sorrounded by ''.
+
+
+Implementation
+-------------
+
+The user arguments are parsed using the python argparse utility. If user has no specified then the default interface (using scapy conf.iface )is selected. Expression is handled in the same was as in dns inject. By default the BPF expression is 'udp src port 53', and if the user has specified any expression as argument , that is appended and used in the scapy sniff method. 
+
+
+In the callback function, the packets are filtered based on their 'ancount' parameter. This denotes the number of DNS records in the dns query result.
+A python dictionary is used keep track of all the DNS Transaction IDs alongwith the IP's obtained as DNS A records as part of the response. If the detector receives another response with the same transaction ID (as what is already present in the dictionary) then it is considered as a DNS poisonning attack. (Except for the case in which I'm checking for the false positives). 
+
+If a DNS poisoning attack is detected, then an alert is made by the detector.The output of the detector is in the following format :
+
+2017-12-09 12:35:15.384607 DNS poisoning attempt
+('TXID ', 3298, ' Request ', 'bbc.com.')
+('Answer1 ', ['212.58.246.79', '212.58.244.23', '212.58.246.78', '212.58.244.22'])
+('Answer2 ', ['192.168.66.6'])
+
+One limitation here is that I'm unable to distinguish between the spoffed response and the actual response.
+
+
+False Positive Handling
+---------------------
+
+Incase of an original query response , the dns server sends response with one or more answer responses i.e the answer records can have one or more IP address. If in the rare case where the original dns server responds 2 times using the same transaction ID, there is high probability that atleast one of the answer record IPs will be shared with the response that was initially send by the server. Now if the TTL for both of the packets are also the same, along with the transaction ID, then in such a case I am not reporting it as a DNS attack.  Specifically, if for a particular transaction ID and TTL, if some of the answer record IPs that are recevived are already present in the dictionary for that particular transaction ID, I'm consider it as a valid response and will append the IP to the dictionary hence avoiding the false positive .
+
+
+Pcap file
+----------
+
+My dnsinjector is able to win the race when the original dns server response comes after say around 30 ms . If the response time is less than 20 ms, the original DNS response reaches before my spoofed response. The pcap file (hw4.pcap) was created using tcpdump and the results below shows the detection that my detector made.
+
+Note : I am using the stable version of scapy . There seems to be a known bug where the filter expressions are not getting applied properly in the offline mode. 
+
+2017-12-09 12:35:15.381890 DNS poisoning attempt
+('TXID ', 55257, ' Request ', 'bbc.com.')
+('Answer1 ', ['212.58.244.22', '212.58.246.79', '212.58.244.23', '212.58.246.78'])
+('Answer2 ', ['192.168.66.6'])
+
+
+2017-12-09 12:35:15.384607 DNS poisoning attempt
+('TXID ', 3298, ' Request ', 'bbc.com.')
+('Answer1 ', ['212.58.246.79', '212.58.244.23', '212.58.246.78', '212.58.244.22'])
+('Answer2 ', ['192.168.66.6'])
+
+
+2017-12-09 12:35:15.388570 DNS poisoning attempt
+('TXID ', 21880, ' Request ', 'bbc.com.')
+('Answer1 ', ['212.58.246.79', '212.58.244.23', '212.58.246.78', '212.58.244.22'])
+('Answer2 ', ['192.168.66.6'])
+
+
+2017-12-09 12:35:15.394235 DNS poisoning attempt
+('TXID ', 6710, ' Request ', 'www.gmail.com.')
+('Answer1 ', ['172.217.10.5'])
+('Answer2 ', ['192.168.66.6'])
+
+
+2017-12-09 12:35:15.400733 DNS poisoning attempt
+('TXID ', 4075, ' Request ', 'www.facebook.com.')
+('Answer1 ', ['31.13.69.228'])
+('Answer2 ', ['10.6.6.6'])
+
+
+2017-12-09 12:35:15.403269 DNS poisoning attempt
+('TXID ', 12085, ' Request ', 'www.gmail.com.')
+('Answer1 ', ['172.217.10.5'])
+('Answer2 ', ['192.168.66.6'])
+
+
+2017-12-09 12:35:15.405863 DNS poisoning attempt
+('TXID ', 44247, ' Request ', 'www.gmail.com.')
+('Answer1 ', ['172.217.10.5'])
+('Answer2 ', ['192.168.66.6'])
+
+
+2017-12-09 12:35:15.408464 DNS poisoning attempt
+('TXID ', 61331, ' Request ', 'www.gmail.com.')
+('Answer1 ', ['172.217.10.5'])
+('Answer2 ', ['192.168.66.6'])
+
+
+2017-12-09 12:35:15.412252 DNS poisoning attempt
+('TXID ', 33381, ' Request ', 'www.gmail.com.')
+('Answer1 ', ['172.217.10.5'])
+('Answer2 ', ['192.168.66.6'])
+
+
+2017-12-09 12:35:15.417006 DNS poisoning attempt
+('TXID ', 2043, ' Request ', 'www.gmail.com.')
+('Answer1 ', ['172.217.10.5'])
+('Answer2 ', ['192.168.66.6'])
+
+
+2017-12-09 12:35:15.419522 DNS poisoning attempt
+('TXID ', 18137, ' Request ', 'www.gmail.com.')
+('Answer1 ', ['172.217.10.5'])
+('Answer2 ', ['192.168.66.6'])
+
+
+2017-12-09 12:35:15.422194 DNS poisoning attempt
+('TXID ', 15568, ' Request ', 'www.gmail.com.')
+('Answer1 ', ['172.217.10.5'])
+('Answer2 ', ['192.168.66.6'])
+
+
+2017-12-09 12:35:15.424820 DNS poisoning attempt
+('TXID ', 25132, ' Request ', 'www.gmail.com.')
+('Answer1 ', ['172.217.10.5'])
+('Answer2 ', ['192.168.66.6'])
+
+
+2017-12-09 12:35:15.427271 DNS poisoning attempt
+('TXID ', 27610, ' Request ', 'www.gmail.com.')
+('Answer1 ', ['172.217.10.5'])
+('Answer2 ', ['192.168.66.6'])
+
+
+2017-12-09 12:35:15.429717 DNS poisoning attempt
+('TXID ', 39125, ' Request ', 'www.gmail.com.')
+('Answer1 ', ['172.217.10.5'])
+('Answer2 ', ['192.168.66.6'])
+
+
+2017-12-09 12:35:15.432241 DNS poisoning attempt
+('TXID ', 9924, ' Request ', 'www.gmail.com.')
+('Answer1 ', ['172.217.10.5'])
+('Answer2 ', ['192.168.66.6'])
+
+
+2017-12-09 12:35:15.434702 DNS poisoning attempt
+('TXID ', 58221, ' Request ', 'www.gmail.com.')
+('Answer1 ', ['172.217.10.5'])
+('Answer2 ', ['192.168.66.6'])
+
+
+2017-12-09 12:35:15.438442 DNS poisoning attempt
+('TXID ', 42286, ' Request ', 'www.gmail.com.')
+('Answer1 ', ['172.217.10.5'])
+('Answer2 ', ['192.168.66.6'])
+
+
+
+
+References
+
+http://www.cs.dartmouth.edu/~sergey/netreads/local/reliable-dns-spoofing-with-python-scapy-nfqueue.html
+http://biot.com/capstats/bpf.html
+https://thepacketgeek.com/scapy-p-09-scapy-and-dns/
+http://scapy.readthedocs.io/en/latest/usage.html
+https://stackoverflow.com/questions/13890935/does-pythons-time-time-return-the-local-or-utc-timestamp
+https://stackoverflow.com/questions/30698521/python-netifaces-how-to-get-currently-used-network-interface
