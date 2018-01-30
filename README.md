@@ -1,7 +1,8 @@
 # Network-Security
 This repository holds the assignments and project works done for the course CSE508- Network Security(Fall 2017), taken by  Prof. Michalis Polychronakis 
 
-#Assignment 1: Passive Network Monitoring
+### Assignment 1: Passive Network Monitoring
+
 Purpose of this assignment is to get familiar with passive network traffic
 monitoring and analysis. Tcpdump is probably the most popular and widely used
 passive network monitoring tool. It is built on top of the Libpcap packet
@@ -9,7 +10,8 @@ capture library and can capture and display packet headers and payloads either
 from a network interface or a network trace file. The task is to analyze
 a network trace file and answer various questions.
 
-#Assignment 2: Passive Network Monitoring
+### Assignment 2: Passive Network Monitoring
+
 Develop a passive network monitoring application
 written in C (or C++, but no other language is acceptable) using the libpcap
 packet capture library. Your program, called 'mydump', will capture the
@@ -19,7 +21,8 @@ much like a simplified version of tcpdump. The user should be able to specify
 a BPF filter for capturing a subset of the traffic, and/or a string pattern
 for capturing only packets with matching payloads.
 
-#Assignment 3: Plugboard Proxy
+### Assignment 3: Plugboard Proxy
+
 The task here is to  develop a "plugboard" proxy for adding an extra
 layer of protection to publicly accessible network services.
 
@@ -63,7 +66,8 @@ pbproxy [-l port] -k keyfile destination port
   -k  Use the symmetric key contained in <keyfile> (as a hexadecimal string)
   
   
-#Assignment 4: DNS Packet Injection  
+### Assignment 4: DNS Packet Injection  
+
 This utility has the following 2 components
 1) an on-path DNS packet injector, and
 2) a passive DNS poisoning attack detector.
